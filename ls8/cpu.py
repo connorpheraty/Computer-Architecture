@@ -1,37 +1,69 @@
+import sys
+
 """CPU functionality."""
 
-import sys
+class Stack():
+    def __init__(self):
+        self.stack = []
+    def push(self, value):
+        self.stack.append(value)
+    def pop(self):
+        if self.size() > 0:
+            return self.stack.pop()
+        else:
+            return None
+    def size(self):
+        return len(self.stack)
 
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        self.ram = [0] * 255
+        self.ram = [0] * 256
         self.reg = [0] * 8
+
+        self.instructions = {}
+
+        self.address = 0
+        self.SP = 0
+
+    def init_SP(self):
+        self.SP = 0
+        
+    def add_instructions(self):
+        
+        self.instructions['LDI'] = 0b10000010
+        self.instructions['PRN'] = 0b01000111
+        self.instructions['HLT'] = 0b00000001
+        self.instructions['MUL'] = 0b10100010
+        self.instructions['PUSH'] = 0b01000101
+        self.instructions['POP'] = 0b01000110
+        
+    def ram_read(self):
+        print(self.ram)
+
+    def ram_write(self, value):
+        self.ram[self.address] = value
+        self.address +=1
 
     def load(self):
         """Load a program into memory."""
-
-        address = 0
-
-        # For now, we've just hardcoded a program:
-
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
-
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
-
-
+        
+        progname = sys.argv[1]
+        
+        with open(progname) as f:
+            for line in f:
+                line = line.split('#')[0]
+                line = line.strip() # Lose whitespace
+                
+                if line == '':
+                    continue
+                
+                val = int(line, base=2)
+                
+                self.ram[self.address] = val
+                self.address +=1
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -40,6 +72,7 @@ class CPU:
             self.reg[reg_a] += self.reg[reg_b]
         elif op == "SUB":
             self.reg[reg_a] -= self.reg[reg_b]
+        
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -64,27 +97,56 @@ class CPU:
         print()
 
     def run(self):
-        """Run the CPU."""
-        pc = 0
+        """Run the CPU."""       
         halted = False 
+        pc = 0
+        self.init_SP()
+
         
+        print('Running program...')
         while not halted:
             instruction = self.ram[pc]
             
-            if instruction == 0b10000010:
+            if instruction == self.instructions['LDI']:
                 reg_num = self.ram[pc+1]
                 value = self.ram[pc+2]
                 
                 self.reg[reg_num] = value
                 
                 pc += 3
+
+            if instruction == self.instructions['PUSH']:
+                self.reg[self.SP] -=1  # Decrement the stack pointer
+                reg_num = self.ram[pc+1]
+                reg_val = self.reg[reg_num]
+
+                self.ram[self.reg[self.SP]] = reg_val # Copy reg value into memory at address SP
+
+                pc +=2
+
+            if instruction == self.instructions['POP']:
+                val = self.ram[self.reg[self.SP]]
+                reg_num = self.ram[pc + 1]
+                self.reg[reg_num] = val # Copy val from memory at SP into register
+
+                self.reg[self.SP] += 1 # Increment SP
+
+                pc += 2
                 
-            if instruction == 0b01000111:
+            if instruction == self.instructions['PRN']:
                 reg_num = self.ram[pc+1]
                 print(self.reg[reg_num])
                 
                 pc += 2
+
+            if instruction == self.instructions['MUL']:
+                reg_num1 = self.reg[self.ram[pc+1]]
+                reg_num2 = self.reg[self.ram[pc+2]]
+
+                self.reg[self.ram[pc+1]] = reg_num1 * reg_num2
+
+                pc += 3
                 
-            if instruction == 0b00000001:
+            if instruction == self.instructions['HLT']:
                 halted= True
                 pc+=1
